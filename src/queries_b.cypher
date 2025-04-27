@@ -1,5 +1,4 @@
 // top 3 most cited papers 
-// для каждой Conference-серии найдём три наиболее цитируемые статьи
 MATCH (conf:Conference)
 
 CALL { 
@@ -14,6 +13,7 @@ CALL {
 RETURN conf.name AS conference, top3;
 
 
+// communities
 MATCH (conf:Conference)
 
 CALL {
