@@ -1,4 +1,3 @@
-import os
 import random
 import string
 import uuid
@@ -6,30 +5,35 @@ from datetime import date, timedelta
 
 from faker import Faker
 
-COUNTS = dict(authors=1000, papers=500, conferences=50, journals=50, keywords=500)
+COUNTS = dict(
+    authors=1000,
+    papers=500,
+    conferences=50,
+    workshops=50,
+    journals=50,
+    keywords=500,
+)
 
 YEARS = list(range(2015, 2025))
 fake = Faker()
-random.seed(42); Faker.seed(42)
+random.seed(42)
+Faker.seed(42)
+
 
 def rand_doi():
-    """
-    Generates a random DOI in the format 10.XXXX/xxxxx.xxxxx
-    where XXXX is a random number between 1000 and 9999
-    """
-    return f"10.{random.randint(1000,9999)}/ {"".join(random.choices(string.ascii_lowercase,k=5))}.{random.randint(10000,99999)}"
+    prefix = random.randint(1000, 9999)
+    suffix1 = "".join(random.choices(string.ascii_lowercase, k=5))
+    suffix2 = random.randint(10000, 99999)
+    return f"10.{prefix}/{suffix1}.{suffix2}"
+
 
 class DataGenerator:
     def __init__(self, counts=COUNTS):
-        """
-        initialize the DataGenerator with the given counts.
-
-        :param counts: Dictionary with the number of authors, papers, conferences, journals and keywords
-        """
         self.c = counts
 
         self.authors, self.keywords = [], []
-        self.events, self.editions = [], []
+        self.conferences, self.workshops = [], []
+        self.editions = []
         self.journals, self.volumes = [], []
         self.papers = []
 
@@ -37,9 +41,17 @@ class DataGenerator:
         self.paper_keywords, self.citations = [], []
 
     def run(self):
-        pipeline = [self._authors, self._keywords, self._events_editions, self._journals_volumes, self._papers, self._citations]
-        for method in pipeline:
-            method()
+        pipeline = [
+            self._authors,
+            self._keywords,
+            self._conferences_editions,
+            self._workshops_editions,
+            self._journals_volumes,
+            self._papers,
+            self._citations,
+        ]
+        for step in pipeline:
+            step()
 
     def _authors(self):
         for _ in range(self.c["authors"]):
@@ -48,72 +60,109 @@ class DataGenerator:
             )
 
     def _keywords(self):
-        pool = [fake.word() for _ in range(self.c["keywords"])]
-        for kw in pool:
-            self.keywords.append({"id": str(uuid.uuid4()), "name": kw})
+        for _ in range(self.c["keywords"]):
+            self.keywords.append(
+                {"id": str(uuid.uuid4()), "name": fake.word()}
+            )
 
-    def _events_editions(self):
+    def _conferences_editions(self):
         for idx in range(self.c["conferences"]):
-            eid = str(uuid.uuid4())
-            self.events.append({"id": eid, "name": f"Conf_{fake.company()}_{idx}", "type": "conference"})
-            first = random.choice(YEARS[:-4])
-            for n in range(random.randint(1,6)):
-                y = first + n
-                start = date(y, random.randint(1,12), random.randint(1,28))
-                end   = start + timedelta(days=3)
-                self.editions.append({
-                    "id": str(uuid.uuid4()), "year": y, "number": n+1,
-                    "event_id": eid, "city": fake.city(), "country": fake.country(),
-                    "start": start.isoformat(), "end": end.isoformat()
-                })
+            cid = str(uuid.uuid4())
+            self.conferences.append(
+                {"id": cid, "name": f"Conf_{fake.company()}_{idx}", "type": "conference"}
+            )
+            self._make_editions(parent_id=cid)
+
+    def _workshops_editions(self):
+        for idx in range(self.c["workshops"]):
+            wid = str(uuid.uuid4())
+            self.workshops.append(
+                {"id": wid, "name": f"WS_{fake.bs().title()}_{idx}", "type": "workshop"}
+            )
+            self._make_editions(parent_id=wid, max_span=3)
+
+    def _make_editions(self, parent_id, max_span: int = 6):
+        first_year = random.choice(YEARS[:-max_span])
+        num_editions = random.randint(1, max_span)
+        for n in range(num_editions):
+            y = first_year + n
+            start = date(y, random.randint(1, 12), random.randint(1, 28))
+            end = start + timedelta(days=random.randint(2, 4))
+            self.editions.append(
+                {
+                    "id": str(uuid.uuid4()),
+                    "year": y,
+                    "number": n + 1,
+                    "event_id": parent_id,
+                    "city": fake.city(),
+                    "country": fake.country(),
+                    "start": start.isoformat(),
+                    "end": end.isoformat(),
+                }
+            )
 
     def _journals_volumes(self):
         for idx in range(self.c["journals"]):
             jid = str(uuid.uuid4())
-            self.journals.append({"id": jid, "name": f"Journal {idx}",
-                                  "issn": f"{random.randint(1000,9999)}-{random.randint(1000,9999)}"})
-            
-            for y in (2022, 2023):      
-                self.volumes.append({"id": str(uuid.uuid4()),
-                                     "number": 1, "year": y, "journal_id": jid})
+            self.journals.append(
+                {
+                    "id": jid,
+                    "name": f"Journal {idx}",
+                    "issn": f"{random.randint(1000, 9999)}-{random.randint(1000, 9999)}",
+                }
+            )
+            for y in (2023, 2024):
+                self.volumes.append(
+                    {"id": str(uuid.uuid4()), "number": 1, "year": y, "journal_id": jid}
+                )
 
     def _papers(self):
-        for conf in self.events:
-            core = random.sample(self.authors, 5)
-            eds  = [e for e in self.editions if e["event_id"] == conf["id"]]
-            for ed in eds:
+        for ev in (self.conferences + self.workshops):
+            core_authors = random.sample(self.authors, 5)
+            ev_editions = [e for e in self.editions if e["event_id"] == ev["id"]]
+            for ed in ev_editions:
                 for _ in range(3):
                     pid = str(uuid.uuid4())
-                    self.papers.append({
-                        "id": pid, "title": fake.sentence(nb_words=6).rstrip("."),
-                        "year": ed["year"], "doi": rand_doi(),
-                        "abstract": fake.paragraph(), "pages": "1-10"
-                    })
+                    self.papers.append(
+                        {
+                            "id": pid,
+                            "title": fake.sentence(nb_words=6).rstrip("."),
+                            "year": ed["year"],
+                            "doi": rand_doi(),
+                            "abstract": fake.paragraph(),
+                            "pages": "1-10",
+                        }
+                    )
                     self.paper_in_edition.append((pid, ed["id"]))
-                    authors = random.sample(core, 3)
-                    for a in authors:
+                    for a in random.sample(core_authors, 3):
                         self.authorship.append((a["id"], pid))
 
         for vol in self.volumes:
             for _ in range(2):
                 pid = str(uuid.uuid4())
-                self.papers.append({
-                    "id": pid, "title": fake.sentence(nb_words=8).rstrip("."),
-                    "year": vol["year"], "doi": rand_doi(),
-                    "abstract": fake.paragraph(), "pages": "11-20"
-                })
+                self.papers.append(
+                    {
+                        "id": pid,
+                        "title": fake.sentence(nb_words=8).rstrip("."),
+                        "year": vol["year"],
+                        "doi": rand_doi(),
+                        "abstract": fake.paragraph(),
+                        "pages": "11-20",
+                    }
+                )
                 self.paper_in_volume.append((pid, vol["id"]))
-                a = random.choice(self.authors)
-                self.authorship.append((a["id"], pid))
+                self.authorship.append((random.choice(self.authors)["id"], pid))
 
         for p in self.papers:
-            for kw in random.sample(self.keywords, random.randint(1,4)):
+            for kw in random.sample(self.keywords, random.randint(1, 4)):
                 self.paper_keywords.append((p["id"], kw["name"]))
 
     def _citations(self):
+        """
+        Create random citation links between papers.
+        """
         ids = [p["id"] for p in self.papers]
-        for p in self.papers:
-            targets = random.sample(ids, 5)
-            for t in targets:
-                if t != p["id"]:
-                    self.citations.append((p["id"], t))
+        for p in ids:
+            for target in random.sample(ids, 5):
+                if target != p:
+                    self.citations.append((p, target))
