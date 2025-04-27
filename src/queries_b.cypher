@@ -1,25 +1,33 @@
 // top 3 most cited papers 
-MATCH (conf:Event {type:'conference'})
+// для каждой Conference-серии найдём три наиболее цитируемые статьи
+MATCH (conf:Conference)
 
-CALL (conf) { 
+CALL { 
+  WITH conf
   MATCH (conf)<-[:OF_EVENT]-(:Edition)<-[:APPEARED_IN]-(p:Paper)
   OPTIONAL MATCH (p)<-[c:CITES]-()
   WITH p, count(c) AS cites
   ORDER BY cites DESC
-  RETURN collect({title:p.title, citations:cites})[0..3] AS top3
+  RETURN collect({title: p.title, citations: cites})[0..3] AS top3
 }
 
 RETURN conf.name AS conference, top3;
 
-// author was published in at least
-MATCH (conf:Event {type:'conference'})<-[:OF_EVENT]-(ed:Edition)<-[:APPEARED_IN]-(p:Paper)<-[:AUTHORED]-(a:Author)
-WITH conf, a, count(DISTINCT ed) AS editionCount
-WHERE editionCount >= 4
 
-RETURN conf.name AS conference,
-a.name AS author,
-editionCount AS editions
-ORDER BY conference, editions DESC;
+MATCH (conf:Conference)
+
+CALL {
+  WITH conf
+  MATCH (conf)<-[:OF_EVENT]-(ed:Edition)
+        <-[:APPEARED_IN]-(p:Paper)
+        <-[:AUTHORED]-(a:Author)
+  WITH a, count(DISTINCT ed) AS editions 
+  WHERE editions >= 4
+  RETURN collect({id: a.id, name: a.name, editions: editions}) AS community
+}
+
+RETURN conf.name AS conference, community;
+
 
 // impact factor
 WITH 2024 AS yr 
@@ -45,4 +53,3 @@ WITH a, reduce(h=0, i IN range(0,size(cs)-1) | CASE WHEN cs[i] >= i+1 THEN i+1 E
 RETURN a.name AS author, h_index
 ORDER BY h_index DESC
 LIMIT 50;
-
