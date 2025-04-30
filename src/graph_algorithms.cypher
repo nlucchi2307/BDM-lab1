@@ -1,6 +1,15 @@
 // create a projection of the graph in memory - this projection includes all 'Paper' nodes 
 // and all the 'Cites' relationships. 
 
+CALL gds.graph.project(
+  'publications-pagerank',   
+  'Paper',                   
+  'CITES'                    
+);
+
+
+// call the projection that we have just created
+
 CALL gds.pageRank.write('publications-pagerank', {
     maxIterations: 20,
     dampingFactor: 0.85,
