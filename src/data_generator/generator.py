@@ -19,7 +19,6 @@ fake = Faker()
 random.seed(42)
 Faker.seed(42)
 
-
 def rand_doi():
     prefix = random.randint(1000, 9999)
     suffix1 = "".join(random.choices(string.ascii_lowercase, k=5))
@@ -40,6 +39,12 @@ class DataGenerator:
         self.authorship, self.paper_in_edition, self.paper_in_volume = [], [], []
         self.paper_keywords, self.citations = [], []
 
+        self.authorship: list[tuple[str, str, str]] = []
+
+        self.reviews: list[dict] = []
+        self.review_votes: list[tuple[str,str,str]] = [] 
+        self.paper_in_review: list[tuple[str, str]] = []
+
     def run(self):
         pipeline = [
             self._authors,
@@ -48,10 +53,12 @@ class DataGenerator:
             self._workshops_editions,
             self._journals_volumes,
             self._papers,
+            self._reviews,
             self._citations,
         ]
         for step in pipeline:
             step()
+
 
     def _authors(self):
         for _ in range(self.c["authors"]):
@@ -116,6 +123,35 @@ class DataGenerator:
                     {"id": str(uuid.uuid4()), "number": 1, "year": y, "journal_id": jid}
                 )
 
+    def _reviews(self):
+        paper_auth_map: dict[str, set[str]] = {}
+        for aid, pid, _ in self.authorship:
+            paper_auth_map.setdefault(pid, set()).add(aid)
+
+        for p in self.papers:
+            pid = p["id"]
+            authors_on_paper = paper_auth_map.get(pid, set())
+
+            candidates = [a for a in self.authors if a["id"] not in authors_on_paper]
+            if len(candidates) < 3:
+                continue
+
+            reviewers = random.sample(candidates, 3)
+            votes = ['accept' if random.random() < 0.5 else 'reject' for _ in range(3)]
+
+            rid = str(uuid.uuid4())
+            decision = (
+                'accept' if votes.count('accept') > votes.count('reject')
+                else 'reject' if votes.count('reject') > votes.count('accept')
+                else 'tie'
+            )
+            self.reviews.append({'id': rid, 'decision': decision})
+
+            self.paper_in_review.append((pid, rid))
+
+            for reviewer, vote in zip(reviewers, votes):
+                self.review_votes.append((reviewer["id"], rid, vote))
+
     def _papers(self):
         for ev in (self.conferences + self.workshops):
             core_authors = random.sample(self.authors, 5)
@@ -133,9 +169,11 @@ class DataGenerator:
                             "pages": "1-10",
                         }
                     )
-                    self.paper_in_edition.append((pid, ed["id"]))
-                    for a in random.sample(core_authors, 3):
-                        self.authorship.append((a["id"], pid))
+                    self.paper_in_edition.append((pid, ed["id"])) 
+                    picked = random.sample(core_authors, 3)
+                    self.authorship.append((picked[0]["id"], pid, "author"))
+                    for a in picked[1:]:
+                        self.authorship.append((a["id"], pid, "coauthor"))
 
         for vol in self.volumes:
             for _ in range(2):
@@ -151,16 +189,15 @@ class DataGenerator:
                     }
                 )
                 self.paper_in_volume.append((pid, vol["id"]))
-                self.authorship.append((random.choice(self.authors)["id"], pid))
+
+                main = random.choice(self.authors)
+                self.authorship.append((main["id"], pid, "author"))
 
         for p in self.papers:
             for kw in random.sample(self.keywords, random.randint(1, 4)):
                 self.paper_keywords.append((p["id"], kw["name"]))
 
     def _citations(self):
-        """
-        Create random citation links between papers.
-        """
         ids = [p["id"] for p in self.papers]
         for p in ids:
             for target in random.sample(ids, 5):

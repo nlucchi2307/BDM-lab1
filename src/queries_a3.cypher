@@ -1,40 +1,21 @@
-MATCH (p:Paper)
-WHERE NOT (p)-[:HAS_REVIEW]->()
-WITH p LIMIT 1000
+MATCH (p:Paper)-[:HAS_REVIEW]->(rev:Review)
+WITH p,
+     collect(rev) AS reviews,
+     sum(CASE rev.decision WHEN 'accept' THEN 1 ELSE 0 END) AS acc,
+     sum(CASE rev.decision WHEN 'reject' THEN 1 ELSE 0 END) AS rej
 
-MATCH (cand:Author)
-WHERE NOT (cand)-[:AUTHORED]->(p)
-WITH p, collect(cand) AS cands
-WHERE size(cands) >= 3 
-WITH p, apoc.coll.randomItems(cands, 3, false) AS reviewers
-WHERE size(reviewers) = 3
+// majority rule
+SET p.accepted =
+  CASE
+    WHEN acc > rej THEN true
+    WHEN rej > acc THEN false
+    ELSE null 
+  END,
+    p.reviewCount = size(reviews), 
+    p.acceptVotes = acc,
+    p.rejectVotes = rej
 
-CALL {
-  WITH p, reviewers
-  CREATE (rev:Review {id: randomUUID()})
-  CREATE (p)-[:HAS_REVIEW]->(rev)
-
-  WITH rev, reviewers
-  UNWIND reviewers AS rv
-  WITH rev, rv,
-       CASE WHEN rand() < 0.5 THEN 'accept' ELSE 'reject' END AS vote
-  CREATE (rv)-[:VOTE {decision: vote}]->(rev)
-
-  WITH rev, collect(vote) AS votes
-  WITH rev,
-       size([v IN votes  WHERE v = 'accept']) AS acc,
-       size([v IN votes  WHERE v = 'reject']) AS rej
-  SET rev.decision =
-        CASE
-          WHEN acc > rej THEN 'accept'
-          WHEN rej > acc THEN 'reject'
-          ELSE 'tie' // just in case there gonna be more than 3 reviewers
-        END
-  RETURN rev
-}
-
-RETURN count(*) AS reviewsCreated;
- count(*) AS papersProcessed;
+RETURN p.title AS Paper, p.reviewCount AS Reviews, p.acceptVotes AS Accept, p.rejectVotes AS Reject, p.accepted AS Accepted;
 
 // organization affiliations
 UNWIND range(1,40) AS n
