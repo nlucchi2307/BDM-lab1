@@ -124,14 +124,28 @@ class DataGenerator:
                 )
 
     def _reviews(self):
-        paper_auth_map: dict[str, set[str]] = {}
-        for aid, pid, _ in self.authorship:
-            paper_auth_map.setdefault(pid, set()).add(aid)
+        ed2event = {ed["id"]: ed["event_id"] for ed in self.editions}
+
+        conf_ids = {c["id"] for c in self.conferences}
+        ws_ids   = {w["id"] for w in self.workshops}
+
+        p_in_ed  = {pid: edid for pid, edid in self.paper_in_edition}
+        p_in_vol = {pid: vid  for pid, vid  in self.paper_in_volume}
 
         for p in self.papers:
             pid = p["id"]
-            authors_on_paper = paper_auth_map.get(pid, set())
 
+            if pid in p_in_ed:
+                event_id = ed2event[p_in_ed[pid]]
+                if event_id in ws_ids:
+                    continue
+
+            elif pid in p_in_vol:
+                pass
+            else:
+                continue
+
+            authors_on_paper = {a for a, p_, _ in self.authorship if p_ == pid}
             candidates = [a for a in self.authors if a["id"] not in authors_on_paper]
             if len(candidates) < 3:
                 continue
@@ -139,18 +153,11 @@ class DataGenerator:
             reviewers = random.sample(candidates, 3)
             votes = ['accept' if random.random() < 0.5 else 'reject' for _ in range(3)]
 
-            rid = str(uuid.uuid4())
-            decision = (
-                'accept' if votes.count('accept') > votes.count('reject')
-                else 'reject' if votes.count('reject') > votes.count('accept')
-                else 'tie'
-            )
-            self.reviews.append({'id': rid, 'decision': decision})
-
-            self.paper_in_review.append((pid, rid))
-
-            for reviewer, vote in zip(reviewers, votes):
-                self.review_votes.append((reviewer["id"], rid, vote))
+            for rev_auth, vote in zip(reviewers, votes):
+                rid = str(uuid.uuid4())
+                self.reviews.append({'id': rid, 'decision': vote})
+                self.paper_in_review.append((pid, rid))
+                self.review_votes.append((rev_auth["id"], rid, vote))
 
     def _papers(self):
         for ev in (self.conferences + self.workshops):
