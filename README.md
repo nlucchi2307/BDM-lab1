@@ -37,11 +37,6 @@ This project models and populates a synthetic academic citation network using **
 - Demonstrated that PageRank captures citation quality, not just count
 - Rank examples show divergence between raw citations and PageRank score
 
-## 📂 Files
-- `generate_graph.py`: synthetic data + loading logic
-- `cypher_queries.cypher`: all key queries from the lab
-- `pagerank_analysis.py`: PageRank logic and ranking comparison
-
 ## 👥 Authors
 DSDM Lab 1 — BSE 2024-2025  
 Denis Shadrin, Noemi Lucchi
