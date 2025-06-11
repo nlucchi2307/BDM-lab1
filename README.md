@@ -38,5 +38,5 @@ This project models and populates a synthetic academic citation network using **
 - Rank examples show divergence between raw citations and PageRank score
 
 ## 👥 Authors
-DSDM Lab 1 — BSE 2024-2025  
+Big Data Management Lab 1 — BSE 2024-2025  
 Denis Shadrin, Noemi Lucchi
